@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/listing_draft.dart';
 import '../repositories/listing_draft_repository.dart';
+import 'my_drafts_page.dart';
 import '../services/gemini_vision_service.dart';
 
 class SellItemPage extends StatefulWidget {
@@ -248,7 +249,22 @@ description: คำบรรยายสินค้า 2-3 ประโยค �
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('ลงประกาศขายสินค้า')),
+      appBar: AppBar(
+        title: const Text('ลงประกาศขายสินค้า'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.history),
+            tooltip: 'ร่างประกาศของฉัน',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    MyDraftsPage(repository: widget.draftRepository),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
