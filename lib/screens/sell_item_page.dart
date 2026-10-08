@@ -7,7 +7,9 @@ import '../models/listing_draft.dart';
 import '../services/gemini_vision_service.dart';
 
 class SellItemPage extends StatefulWidget {
-  const SellItemPage({super.key});
+  // STUB ชั่วคราว: เปลี่ยนเป็น ListingDraftRepository และ required ในขั้นตอนที่ 5.2
+  final dynamic draftRepository;
+  const SellItemPage({super.key, this.draftRepository});
 
   @override
   State<SellItemPage> createState() => _SellItemPageState();
