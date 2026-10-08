@@ -4,12 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../models/listing_draft.dart';
+import '../repositories/listing_draft_repository.dart';
 import '../services/gemini_vision_service.dart';
 
 class SellItemPage extends StatefulWidget {
-  // STUB ชั่วคราว: เปลี่ยนเป็น ListingDraftRepository และ required ในขั้นตอนที่ 5.2
-  final dynamic draftRepository;
-  const SellItemPage({super.key, this.draftRepository});
+  final ListingDraftRepository draftRepository;
+  const SellItemPage({super.key, required this.draftRepository});
 
   @override
   State<SellItemPage> createState() => _SellItemPageState();
@@ -27,15 +27,13 @@ description: คำบรรยายสินค้า 2-3 ประโยค �
 
   File? _selectedImage;
   bool _isAnalyzing = false;
+  bool _isSaving = false;
   String? _errorMessage;
   ListingDraft? _draft;
 
   final _titleController = TextEditingController();
   final _categoryController = TextEditingController();
   final _descriptionController = TextEditingController();
-
-  // ร่างประกาศที่ผู้ใช้ยืนยันแล้ว (เก็บใน State เท่านั้น ยังไม่บันทึกถาวร)
-  final List<({ListingDraft draft, File? image})> _confirmedDrafts = [];
 
   @override
   void dispose() {
@@ -182,85 +180,69 @@ description: คำบรรยายสินค้า 2-3 ประโยค �
         ),
         const SizedBox(height: 16),
         FilledButton.icon(
-          icon: const Icon(Icons.check),
-          label: const Text('ยืนยันร่างประกาศ'),
-          onPressed: _confirmDraft,
+          icon: _isSaving
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.check),
+          label: Text(_isSaving ? 'กำลังบันทึก...' : 'ยืนยันร่างประกาศ'),
+          onPressed: _isSaving ? null : _confirmDraft,
         ),
       ],
     );
   }
 
-  void _confirmDraft() {
+  Future<void> _confirmDraft() async {
+    final image = _selectedImage;
     final title = _titleController.text.trim();
     final category = _categoryController.text.trim();
     final description = _descriptionController.text.trim();
-    if (title.isEmpty || category.isEmpty || description.isEmpty) {
+    if (image == null ||
+        title.isEmpty ||
+        category.isEmpty ||
+        description.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('กรุณากรอกข้อมูลให้ครบทุกช่อง')),
       );
       return;
     }
 
-    setState(() {
-      _confirmedDrafts.add((
-        draft: ListingDraft(
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _isSaving = true);
+    try {
+      // บันทึกลงฐานข้อมูล Drift ถาวร (ไม่หายเมื่อปิดแอป)
+      await widget.draftRepository.saveDraft(
+        ListingDraft(
           title: title,
           category: category,
           description: description,
         ),
-        image: _selectedImage,
-      ));
-      // ล้างฟอร์มกลับสู่สถานะว่างเปล่า พร้อมลงประกาศใหม่
-      _selectedImage = null;
-      _draft = null;
-      _errorMessage = null;
-      _titleController.clear();
-      _categoryController.clear();
-      _descriptionController.clear();
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('บันทึกร่างประกาศเรียบร้อยแล้ว')),
-    );
-  }
-
-  Widget _buildConfirmedDrafts() {
-    if (_confirmedDrafts.isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 32),
-        const Divider(),
-        const SizedBox(height: 8),
-        Text(
-          'ร่างประกาศที่ยืนยันแล้ว (${_confirmedDrafts.length})',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 8),
-        // แสดงใหม่สุดไว้บนสุด
-        for (final item in _confirmedDrafts.reversed)
-          Card(
-            child: ListTile(
-              leading: item.image != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        item.image!,
-                        width: 64,
-                        height: 64,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  : const Icon(Icons.image_not_supported),
-              title: Text(item.draft.title),
-              subtitle: Text(
-                '${item.draft.category}\n${item.draft.description}',
-              ),
-              isThreeLine: true,
-            ),
-          ),
-      ],
-    );
+        image.path,
+      );
+      if (!mounted) return;
+      setState(() {
+        // ล้างฟอร์มกลับสู่สถานะว่างเปล่า พร้อมลงประกาศใหม่
+        _selectedImage = null;
+        _draft = null;
+        _errorMessage = null;
+        _titleController.clear();
+        _categoryController.clear();
+        _descriptionController.clear();
+      });
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('บันทึกร่างประกาศเรียบร้อยแล้ว')),
+        );
+    } catch (e) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('บันทึกร่างไม่สำเร็จ: $e')));
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   @override
@@ -301,7 +283,6 @@ description: คำบรรยายสินค้า 2-3 ประโยค �
             ),
             const SizedBox(height: 24),
             _buildResult(),
-            _buildConfirmedDrafts(),
           ],
         ),
       ),
